@@ -36,7 +36,7 @@ const MazeComponent: React.FC<MazeProps> = ({ maze }) => {
   ) => {
     if (!isSolving) return;
     if (mazeCopy[y][x] === 'end') {
-      setIsSolving(false); // Stop solving when reaching the end
+      setIsSolving(false);
       return;
     }
 
@@ -48,6 +48,7 @@ const MazeComponent: React.FC<MazeProps> = ({ maze }) => {
     ];
 
     let moved = false;
+    let isEnd = false;
 
     for (const direction of directions) {
       if (!isSolving) {
@@ -85,9 +86,9 @@ const MazeComponent: React.FC<MazeProps> = ({ maze }) => {
       if (mazeCopy[newY][newX] === 'end' || mazeCopy[newY][newX] === 'start') {
         debugger;
         setCurrentPosition({ x: newX, y: newY });
-        await delay(100);
-        await solveMaze(newX, newY, x, y, mazeCopy, pathStack);
-        return;
+        setIsSolving(false);
+        isEnd = true;
+        break;
       }
 
       if (mazeCopy[newY][newX] === 'path') {
@@ -106,7 +107,6 @@ const MazeComponent: React.FC<MazeProps> = ({ maze }) => {
     }
 
     if (!moved) {
-      debugger;
       let allDirectionsClosed = true;
 
       if (mazeCopy[y][x] === 'end' || mazeCopy[y][x] === 'start') {
