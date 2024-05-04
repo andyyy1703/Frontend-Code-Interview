@@ -2,7 +2,6 @@ import Maze from '@/model/api/maze/maze';
 import { useEffect, useState } from 'react';
 import { LuRat } from 'react-icons/lu';
 import { FaCheese } from 'react-icons/fa';
-import { off } from 'process';
 
 interface MazeProps {
   maze: Maze;
@@ -15,7 +14,6 @@ const MazeComponent: React.FC<MazeProps> = ({ maze }) => {
   const [isSolving, setIsSolving] = useState(false);
   const [currentPosition, setCurrentPosition] = useState<{ x: number; y: number }>({ x: -1, y: -1 });
   const [mazeCopy, setMazeCopy] = useState<CopyMaze>(JSON.parse(JSON.stringify(maze)));
-  const [backtrackStack, setBacktrackStack] = useState<{ x: number; y: number }>({ x: -1, y: -1 });
 
   useEffect(() => {
     resetMaze();
@@ -24,7 +22,7 @@ const MazeComponent: React.FC<MazeProps> = ({ maze }) => {
   useEffect(() => {
     if (isSolving) {
       const pathStack: { x: number; y: number }[] = [];
-      solveMaze(currentPosition.x, currentPosition.y, backtrackStack.x, backtrackStack.y, mazeCopy, pathStack);
+      solveMaze(currentPosition.x, currentPosition.y, currentPosition.x, currentPosition.y, mazeCopy, pathStack);
     }
   }, [isSolving]);
 
@@ -84,10 +82,13 @@ const MazeComponent: React.FC<MazeProps> = ({ maze }) => {
         }
       }
 
-      // if (mazeCopy[newY][newX] === 'end' || mazeCopy[newY][newX] === 'start') {
-      //   setMazeCopy((prevMaze) => updateMazeCell(prevMaze, newY, newX, 'visited'));
-      //   return;
-      // }
+      if (mazeCopy[newY][newX] === 'end' || mazeCopy[newY][newX] === 'start') {
+        debugger;
+        setCurrentPosition({ x: newX, y: newY });
+        await delay(100);
+        await solveMaze(newX, newY, x, y, mazeCopy, pathStack);
+        return;
+      }
 
       if (mazeCopy[newY][newX] === 'path') {
         setMazeCopy((prevMaze) => updateMazeCell(prevMaze, newY, newX, 'visited'));
@@ -96,7 +97,6 @@ const MazeComponent: React.FC<MazeProps> = ({ maze }) => {
       pathStack.push({ x: x, y: y });
 
       setCurrentPosition({ x: newX, y: newY });
-      setBacktrackStack({ x: x, y: y });
 
       moved = true;
       if (moved) {
@@ -106,11 +106,12 @@ const MazeComponent: React.FC<MazeProps> = ({ maze }) => {
     }
 
     if (!moved) {
+      debugger;
       let allDirectionsClosed = true;
 
-      // if (mazeCopy[y][x] === 'end' || mazeCopy[y][x] === 'start') {
-      //   return;
-      // }
+      if (mazeCopy[y][x] === 'end' || mazeCopy[y][x] === 'start') {
+        return;
+      }
 
       for (const direction of directions) {
         const newX = x + direction.x;
@@ -154,7 +155,6 @@ const MazeComponent: React.FC<MazeProps> = ({ maze }) => {
     setIsSolving(false);
     setCurrentPosition(getStartPoint());
     setMazeCopy(JSON.parse(JSON.stringify(maze)));
-    setBacktrackStack(getStartPoint());
   };
 
   const getStartPoint = () => {
