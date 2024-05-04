@@ -2,7 +2,7 @@ import Maze from '@/model/api/maze/maze';
 import { useEffect, useState } from 'react';
 import { LuRat } from 'react-icons/lu';
 import { FaCheese } from 'react-icons/fa';
-import { get } from 'http';
+import { off } from 'process';
 
 interface MazeProps {
   maze: Maze;
@@ -13,20 +13,32 @@ type CopyMaze = MazeCell[][];
 
 const MazeComponent: React.FC<MazeProps> = ({ maze }) => {
   const [isSolving, setIsSolving] = useState(false);
-  const [path, setPath] = useState<number[][]>([]);
   const [currentPosition, setCurrentPosition] = useState<{ x: number; y: number }>({ x: -1, y: -1 });
   const [mazeCopy, setMazeCopy] = useState<CopyMaze>(JSON.parse(JSON.stringify(maze)));
+  const [backtrackStack, setBacktrackStack] = useState<{ x: number; y: number }>({ x: -1, y: -1 });
 
   useEffect(() => {
-    const startPoint = getStartPoint();
-    setCurrentPosition(startPoint);
-    setPath([[startPoint.x, startPoint.y]]);
-    solveMaze(currentPosition.x, currentPosition.y, currentPosition.x, currentPosition.y, mazeCopy);
-  }, [maze, isSolving]);
+    resetMaze();
+  }, []);
 
-  const solveMaze = async (x: number, y: number, prevX: number, prevY: number, mazeCopy: CopyMaze) => {
+  useEffect(() => {
+    if (isSolving) {
+      const pathStack: { x: number; y: number }[] = [];
+      solveMaze(currentPosition.x, currentPosition.y, backtrackStack.x, backtrackStack.y, mazeCopy, pathStack);
+    }
+  }, [isSolving]);
+
+  const solveMaze = async (
+    x: number,
+    y: number,
+    prevX: number,
+    prevY: number,
+    mazeCopy: CopyMaze,
+    pathStack: { x: number; y: number }[],
+  ) => {
     if (!isSolving) return;
     if (mazeCopy[y][x] === 'end') {
+      setIsSolving(false); // Stop solving when reaching the end
       return;
     }
 
@@ -44,60 +56,91 @@ const MazeComponent: React.FC<MazeProps> = ({ maze }) => {
         return;
       }
 
-      // 下一步位置上下左右
       const newX = x + direction.x;
       const newY = y + direction.y;
 
-      // 如果超出邊界, 跳過
       if (newY < 0 || newY >= mazeCopy.length || newX < 0 || newX >= mazeCopy[0].length) {
         continue;
       }
 
-      if (mazeCopy[newY][x] === 'closed') {
-        mazeCopy[prevY][prevX] = 'path';
+      if (mazeCopy[newY][newX] === 'closed') {
         continue;
       }
 
-      // 如果跟上一步位置一樣, 跳過
       if (newX === prevX && newY === prevY && mazeCopy[newY][newX] !== 'path') {
         continue;
       }
 
-      // 如果是走過的路或者牆, 跳過
-      if (mazeCopy[newY][newX] === 'visited' || mazeCopy[newY][newX] === 'wall') {
+      if (mazeCopy[newY][newX] === 'wall') {
         continue;
       }
-      debugger;
 
-      // 走過的點
-      setPath((prevPath) => [...prevPath, [newX, newY]]);
-
-      // 更新當前位置
-      setCurrentPosition({ x: newX, y: newY });
-
-      // 標記為已經走過的路
-      setMazeCopy((prevMaze) => {
-        const newMaze = [...prevMaze]; // 先複製一份原先的迷宮
-        newMaze[newY][newX] = 'visited'; // 更新新的迷宮狀態
-        return newMaze; // 返回新的迷宮狀態
-      });
-
-      // 如果找到終點，停止遞迴
-      if (mazeCopy[newY][newX] === 'end') {
-        return;
+      if (mazeCopy[newY][newX] === 'visited') {
+        if (mazeCopy[y][x] === 'path') {
+          setMazeCopy((prevMaze) => updateMazeCell(prevMaze, y, x, 'closed'));
+          setMazeCopy((prevMaze) => updateMazeCell(prevMaze, newY, newX, 'path'));
+        } else {
+          continue;
+        }
       }
 
-      moved = true;
+      // if (mazeCopy[newY][newX] === 'end' || mazeCopy[newY][newX] === 'start') {
+      //   setMazeCopy((prevMaze) => updateMazeCell(prevMaze, newY, newX, 'visited'));
+      //   return;
+      // }
 
-      await delay(100);
-      await solveMaze(newX, newY, x, y, mazeCopy);
+      if (mazeCopy[newY][newX] === 'path') {
+        setMazeCopy((prevMaze) => updateMazeCell(prevMaze, newY, newX, 'visited'));
+      }
+
+      pathStack.push({ x: x, y: y });
+
+      setCurrentPosition({ x: newX, y: newY });
+      setBacktrackStack({ x: x, y: y });
+
+      moved = true;
+      if (moved) {
+        await delay(100);
+        await solveMaze(newX, newY, x, y, mazeCopy, pathStack);
+      }
     }
 
-    // 如果在這個位置沒有成功移動，則往回移動一步, 並把這個點標記為 'closed'
     if (!moved) {
-      mazeCopy[y][x] = 'closed';
-      setPath((prevPath) => prevPath.slice(0, -1));
-      setCurrentPosition({ x: prevX, y: prevY });
+      let allDirectionsClosed = true;
+
+      // if (mazeCopy[y][x] === 'end' || mazeCopy[y][x] === 'start') {
+      //   return;
+      // }
+
+      for (const direction of directions) {
+        const newX = x + direction.x;
+        const newY = y + direction.y;
+
+        if (newY < 0 || newY >= mazeCopy.length || newX < 0 || newX >= mazeCopy[0].length) {
+          continue;
+        }
+
+        if (mazeCopy[newY][newX] === 'closed') {
+          continue;
+        }
+
+        if (mazeCopy[newY][newX] === 'path') {
+          pathStack.push({ x: x, y: y });
+          setCurrentPosition({ x: newX, y: newY });
+          await delay(100);
+          await solveMaze(newX, newY, x, y, mazeCopy, pathStack);
+        }
+      }
+
+      if (allDirectionsClosed) {
+        setMazeCopy((prevMaze) => updateMazeCell(prevMaze, y, x, 'closed'));
+        const lastPosition = pathStack.pop();
+        if (lastPosition) {
+          setCurrentPosition(lastPosition);
+          await delay(100);
+          await solveMaze(lastPosition.x, lastPosition.y, x, y, mazeCopy, pathStack);
+        }
+      }
     }
   };
 
@@ -110,8 +153,8 @@ const MazeComponent: React.FC<MazeProps> = ({ maze }) => {
   const resetMaze = () => {
     setIsSolving(false);
     setCurrentPosition(getStartPoint());
-    setPath([]);
     setMazeCopy(JSON.parse(JSON.stringify(maze)));
+    setBacktrackStack(getStartPoint());
   };
 
   const getStartPoint = () => {
@@ -130,10 +173,6 @@ const MazeComponent: React.FC<MazeProps> = ({ maze }) => {
   };
 
   const colorCell = (cell: string, x: number, y: number) => {
-    if (cell === 'visited') {
-      return 'bg-amber-200';
-    }
-
     switch (cell) {
       case 'start':
         return 'bg-amber-200';
@@ -142,13 +181,19 @@ const MazeComponent: React.FC<MazeProps> = ({ maze }) => {
       case 'path':
         return 'bg-lime-50';
       case 'visited':
-        return 'bg-lime-200';
+        return 'bg-amber-200';
+      case 'closed':
+        return 'bg-lime-50';
       default:
-        return '';
+        return 'bg-lime-50';
     }
   };
 
-  console.log(mazeCopy);
+  const updateMazeCell = (maze: CopyMaze, y: number, x: number, newValue: MazeCell): CopyMaze => {
+    const newMaze = [...maze];
+    newMaze[y][x] = newValue;
+    return newMaze;
+  };
 
   return (
     <div className="mt-4 border-b-2 pb-2 border-slate-400">
@@ -160,9 +205,11 @@ const MazeComponent: React.FC<MazeProps> = ({ maze }) => {
               className={`w-12 h-12 flex justify-center align-middle ${colorCell(cell, cellIndex, rowIndex)}`}
             >
               {currentPosition.x === cellIndex && currentPosition.y === rowIndex && (
-                <LuRat className="text-neutral-500 w-10 h-10" />
+                <LuRat className="text-neutral-500 w-12 h-12 bg-amber-200" />
               )}
-              {cell === 'end' && <FaCheese className="text-amber-400 w-10 h-10" />}
+              {cell === 'end' && currentPosition.x !== cellIndex && currentPosition.y !== rowIndex && (
+                <FaCheese className="text-amber-400 w-10 h-10" />
+              )}
             </div>
           ))}
         </div>
